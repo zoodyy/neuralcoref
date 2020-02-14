@@ -20,24 +20,13 @@ import numpy as np
 ####### UTILITIES #######
 #########################
 
-NO_COREF_LIST = ["i", "me", "my", "you", "your"]
+NO_COREF_LIST = ["ich", "mir", "mich", "mein", "meine", "meinen", "meiner", "du", "dir","dich", "dein", "deine", "deinen", "deiner"]
 
 MENTION_TYPE = {"PRONOMINAL": 0, "NOMINAL": 1, "PROPER": 2, "LIST": 3}
 MENTION_LABEL = {0: "PRONOMINAL", 1: "NOMINAL", 2: "PROPER", 3: "LIST"}
 
-PROPERS_TAGS = ["NN", "NNS", "NNP", "NNPS"]
-ACCEPTED_ENTS = [
-    "PERSON",
-    "NORP",
-    "FACILITY",
-    "ORG",
-    "GPE",
-    "LOC",
-    "PRODUCT",
-    "EVENT",
-    "WORK_OF_ART",
-    "LANGUAGE",
-]
+PROPERS_TAGS = ["NE", "NN", "NNE"]
+ACCEPTED_ENTS = ["PER", "LOC", "ORG"]
 WHITESPACE_PATTERN = r"\s+|_+"
 UNKNOWN_WORD = "*UNK*"
 MISSING_WORD = "<missing>"
@@ -73,13 +62,16 @@ def extract_mentions_spans(doc, blacklist, debug=False):
 
     if debug:
         print("==-- ents:", list(((ent, ent.label_) for ent in mentions_spans)))
-    for spans in parallel_process(
-        [{"doc": doc, "span": sent, "blacklist": blacklist} for sent in doc.sents],
-        _extract_from_sent,
-        use_kwargs=True,
-        front_num=0,
-    ):
-        mentions_spans = mentions_spans + spans
+    # for spans in parallel_process(
+    #     [{"doc": doc, "span": sent, "blacklist": blacklist} for sent in doc.sents],
+    #     _extract_from_sent,
+    #     use_kwargs=True,
+    #     front_num=0,
+    # ):
+    #     mentions_spans = mentions_spans + spans
+    for sent in doc.sents:
+        spans = _extract_from_sent(doc, sent, blacklist, debug)
+        mentions_spans.extend(spans)
     spans_set = set()
     cleaned_mentions_spans = []
     for spans in mentions_spans:
@@ -94,13 +86,19 @@ def _extract_from_sent(doc, span, blacklist=True, debug=False):
     """
     Extract Pronouns and Noun phrases mentions from a spacy Span
     """
-    keep_tags = re.compile(r"N.*|PRP.*|DT|IN")
-    leave_dep = ["det", "compound", "appos"]
-    keep_dep = ["nsubj", "dobj", "iobj", "pobj"]
-    nsubj_or_dep = ["nsubj", "dep"]
-    conj_or_prep = ["conj", "prep"]
+    # keep_tags = re.compile(r"N.*|PRP.*|DT|IN")
+    keep_tags = re.compile(r"N.*|P[DPR][^O].*|ART")
+    # leave_dep = ["det", "compound", "appos"]
+    leave_dep = ["app"]
+    # keep_dep = ["nsubj", "dobj", "iobj", "pobj"]
+    keep_dep = ["sb", "sbp", "oa", "oa2", "op", "og"]
+    nsubj_or_dep = ["sb", "sbp"]
+    # conj_or_prep = ["conj", "prep"]
+    conj_or_prep = ["cd", "cj", "cm", "app"]
     remove_pos = ["CCONJ", "INTJ", "ADP"]
     lower_not_end = ["'s", ",", ".", "!", "?", ":", ";"]
+    pronoun_regex = re.compile(r"P[DPR][^O].*")
+    marker = ["ac", "dm"]
 
     # Utility to remove bad endings
     def cleanup_endings(left, right, token):
@@ -148,7 +146,8 @@ def _extract_from_sent(doc, span, blacklist=True, debug=False):
                 "tok.dep_:",
                 token.dep_,
             )
-
+        if token.text == "darauf":
+            print(token)
         if blacklist and token.lower_ in NO_COREF_LIST:
             if debug:
                 print("token in no_coref_list")
@@ -161,7 +160,7 @@ def _extract_from_sent(doc, span, blacklist=True, debug=False):
             continue
 
         # pronoun
-        if re.match(r"PRP.*", token.tag_):
+        if pronoun_regex.match(token.tag_):
             if debug:
                 print("PRP")
             endIdx = token.i + 1
@@ -224,14 +223,15 @@ def _extract_from_sent(doc, span, blacklist=True, debug=False):
             continue
 
         # clean up
-        for c in doc:
-            if debug and c.head.i == token.i:
-                print("🚧 token in span:", c, "- head & dep:", c.head, c.dep_)
+        if debug:
+            for c in doc:
+                if c.head.i == token.i:
+                    print("🚧 token in span:", c, "- head & dep:", c.head, c.dep_)
         left = list(c.left_edge.i for c in doc if c.head.i == token.i)
         right = list(c.right_edge.i for c in doc if c.head.i == token.i)
         if (
-            token.tag_ == "IN"
-            and token.dep_ == "mark"
+            token.pos_ == "ADP"
+            and token.dep_ in marker
             and len(left) == 0
             and len(right) == 0
         ):
@@ -958,16 +958,11 @@ class Document(object):
 
 def mention_detection_debug(sentence):
     print("🌋 Loading spacy model")
-    try:
-        spacy.info("en_core_web_sm")
-        model = "en_core_web_sm"
-    except IOError:
-        print("No spacy 2 model detected, using spacy1 'en' model")
-        spacy.info("en")
-        model = "en"
+    spacy.info("de_core_news_sm")
+    model = "de_core_news_sm"
     nlp = spacy.load(model)
-    doc = nlp(sentence.decode("utf-8"))
-    mentions = extract_mentions_spans(doc, blacklist=False, debug=True)
+    doc = nlp(sentence)
+    mentions = extract_mentions_spans(doc, blacklist=False, debug=False)
     for mention in mentions:
         print(mention)
 
@@ -979,4 +974,4 @@ if __name__ == "__main__":
         sent = sys.argv[1]
         mention_detection_debug(sent)
     else:
-        mention_detection_debug("My sister has a dog. She loves him.")
+        mention_detection_debug(sent_de)
