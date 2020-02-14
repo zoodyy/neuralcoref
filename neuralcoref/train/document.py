@@ -62,16 +62,17 @@ def extract_mentions_spans(doc, blacklist, debug=False):
 
     if debug:
         print("==-- ents:", list(((ent, ent.label_) for ent in mentions_spans)))
-    # for spans in parallel_process(
-    #     [{"doc": doc, "span": sent, "blacklist": blacklist} for sent in doc.sents],
-    #     _extract_from_sent,
-    #     use_kwargs=True,
-    #     front_num=0,
-    # ):
-    #     mentions_spans = mentions_spans + spans
-    for sent in doc.sents:
-        spans = _extract_from_sent(doc, sent, blacklist, debug)
-        mentions_spans.extend(spans)
+        
+    for spans in parallel_process(
+        [{"doc": doc, "span": sent, "blacklist": blacklist} for sent in doc.sents],
+        _extract_from_sent,
+        use_kwargs=True,
+        front_num=0,
+    ):
+        mentions_spans = mentions_spans + spans
+    # for sent in doc.sents:
+    #     spans = _extract_from_sent(doc, sent, blacklist, debug)
+    #     mentions_spans.extend(spans)
     spans_set = set()
     cleaned_mentions_spans = []
     for spans in mentions_spans:
@@ -146,8 +147,6 @@ def _extract_from_sent(doc, span, blacklist=True, debug=False):
                 "tok.dep_:",
                 token.dep_,
             )
-        if token.text == "darauf":
-            print(token)
         if blacklist and token.lower_ in NO_COREF_LIST:
             if debug:
                 print("token in no_coref_list")
@@ -974,4 +973,4 @@ if __name__ == "__main__":
         sent = sys.argv[1]
         mention_detection_debug(sent)
     else:
-        mention_detection_debug(sent_de)
+        mention_detection_debug("")
